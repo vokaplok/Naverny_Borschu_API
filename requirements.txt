@@ -1,0 +1,6 @@
+# Основні залежності для Django API проєкту
+django>=4.2,<5.0          # Django фреймворк
+djangorestframework>=3.14 # Django REST Framework для API
+psycopg2-binary>=2.9      # PostgreSQL адаптер (опціонально, для production)
+pillow>=10.0              # Робота з зображеннями (фото борщів)
+pytest-django>=4.5        # Тестування Django проєкту

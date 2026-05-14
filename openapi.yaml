@@ -1,0 +1,1966 @@
+openapi: 3.1.0
+info:
+  title: Naverny Borschu API
+  description: |
+    API для системи управління борщами та закладами.
+    
+    ## Основні можливості:
+    - Управління закладами (Places)
+    - Управління борщами (Borsches)
+    - Відгуки та оцінки (Reviews)
+    - Профілі користувачів (User Profiles)
+    - Обрані борщі (Favorites)
+    
+    ## Авторизація
+    Більшість ендпоінтів для створення/оновлення/видалення вимагають авторизації.
+    Публічні ендпоінти (GET) доступні без авторизації.
+  version: 1.0.0
+  contact:
+    name: Naverny Borschu Team
+
+servers:
+  - url: http://localhost:8000/api
+    description: Локальний сервер розробки
+  - url: https://api.naverny-borschu.com/api
+    description: Production сервер
+
+tags:
+  - name: Places
+    description: Заклади харчування (ресторани, кафе тощо)
+  - name: Borsches
+    description: Борщі (страви у закладах)
+  - name: Reviews
+    description: Відгуки та оцінки борщів
+  - name: Profile
+    description: Профілі користувачів
+  - name: Favorites
+    description: Обрані борщі користувачів
+  - name: Place Types
+    description: Довідник типів закладів
+  - name: Users
+    description: Користувачі системи
+
+paths:
+  /place-types/:
+    get:
+      tags:
+        - Place Types
+      summary: Отримати список типів закладів
+      description: Повертає довідник типів закладів (Ресторан, Кафе, Бістро, Паб)
+      operationId: listPlaceTypes
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/pageSizeParam'
+      responses:
+        '200':
+          description: Успішний відповідь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPlaceTypeList'
+              examples:
+                example-1:
+                  summary: Приклад відповіді
+                  value:
+                    count: 4
+                    next: null
+                    previous: null
+                    page: 1
+                    page_size: 20
+                    total_pages: 1
+                    results:
+                      - code: RESTAURANT
+                        label: Ресторан
+                      - code: CAFE
+                        label: Кафе
+                      - code: BISTRO
+                        label: Бістро
+                      - code: PUB
+                        label: Паб
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /places/:
+    get:
+      tags:
+        - Places
+      summary: Отримати список закладів
+      description: |
+        Повертає список всіх закладів з можливістю фільтрації.
+
+        **Фільтри:**
+        - `search` - пошук по назві або адресі
+        - `city` - фільтр по місту
+        - `type` - фільтр по типу закладу (код типу)
+        - `ids` - список ID через кому (батч-запит)
+        - `bbox` - географічний прямокутник (SW + NE кути)
+      operationId: listPlaces
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/pageSizeParam'
+        - name: search
+          in: query
+          description: Пошук по назві або адресі закладу
+          schema:
+            type: string
+            maxLength: 255
+          example: "Пузата Хата"
+        - name: city
+          in: query
+          description: Фільтр по місту
+          schema:
+            type: string
+          example: "Київ"
+        - name: type
+          in: query
+          description: |
+            Фільтр по типу закладу. Підтримує:
+            - одне значення: `?type=Бістро` (icontains, backward compatible);
+            - список через кому: `?type=Паб,Бістро` — повертає заклади, у яких тип збігається з БУДЬ-ЯКИМ значенням (OR).
+          schema:
+            type: string
+          example: "Паб,Бістро"
+        - name: ids
+          in: query
+          description: |
+            Список ID закладів через кому. Дозволяє запросити кілька конкретних закладів одним запитом
+            (наприклад після клієнтської фільтрації борщів).
+            Невалідні значення тихо пропускаються; якщо валідних ID немає — повертається порожній результат.
+          schema:
+            type: string
+          example: "1,5,42"
+        - name: bbox
+          in: query
+          description: |
+            Географічний прямокутник для viewport-фільтра. Формат:
+            `sw_lat,sw_lng,ne_lat,ne_lng` (південно-західний + північно-східний кути).
+            Повертає тільки заклади, координати яких знаходяться в цьому прямокутнику.
+            Невалідний bbox тихо ігнорується (фільтр не застосовується).
+          schema:
+            type: string
+          example: "50.40,30.45,50.50,30.60"
+      responses:
+        '200':
+          description: Успішний відповідь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPlaceList'
+              examples:
+                example-1:
+                  summary: Приклад відповіді
+                  value:
+                    count: 2
+                    next: null
+                    previous: null
+                    page: 1
+                    page_size: 20
+                    total_pages: 1
+                    results:
+                      - id: "c4f2d26e-9b1b-4a21-9c8a-1a6d3c251234"
+                        name: "Пузата Хата"
+                        address: "Хрещатик, 25"
+                        location_lat: 50.450001
+                        location_lng: 30.523333
+                        country: "Україна"
+                        city: "Київ"
+                        type: "RESTAURANT"
+                        type_label: "Ресторан"
+                        created_at: "2025-03-12T10:15:00Z"
+                        updated_at: "2025-03-12T10:15:00Z"
+        '500':
+          $ref: '#/components/responses/ServerError'
+    
+    post:
+      tags:
+        - Places
+      summary: Створити новий заклад
+      description: |
+        Створює новий заклад. **Вимагає авторизації.**
+        
+        Усі поля обов'язкові для заповнення.
+      operationId: createPlace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlaceCreate'
+            examples:
+              example-1:
+                summary: Приклад створення закладу
+                value:
+                  name: "Пузата Хата"
+                  address: "Хрещатик, 25"
+                  location_lat: 50.450001
+                  location_lng: 30.523333
+                  country: "Україна"
+                  city: "Київ"
+                  type: "RESTAURANT"
+      responses:
+        '201':
+          description: Заклад успішно створено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Place'
+              examples:
+                example-1:
+                  summary: Приклад відповіді
+                  value:
+                    id: "c4f2d26e-9b1b-4a21-9c8a-1a6d3c251234"
+                    name: "Пузата Хата"
+                    address: "Хрещатик, 25"
+                    location_lat: 50.450001
+                    location_lng: 30.523333
+                    country: "Україна"
+                    city: "Київ"
+                    type: "RESTAURANT"
+                    type_label: "Ресторан"
+                    created_at: "2025-03-12T10:15:00Z"
+                    updated_at: "2025-03-12T10:15:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /places/{id}/:
+    get:
+      tags:
+        - Places
+      summary: Отримати заклад по ID
+      description: Повертає детальну інформацію про заклад
+      operationId: retrievePlace
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '200':
+          description: Успішний відповідь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Place'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    
+    patch:
+      tags:
+        - Places
+      summary: Оновити заклад
+      description: |
+        Часткове оновлення закладу. **Вимагає авторизації.**
+        
+        Всі поля необов'язкові (часткове оновлення).
+      operationId: updatePlace
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlaceUpdate'
+            examples:
+              example-1:
+                summary: Приклад оновлення
+                value:
+                  name: "Пузата Хата (оновлено)"
+                  address: "Хрещатик, 25А"
+      responses:
+        '200':
+          description: Заклад успішно оновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Place'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    
+    delete:
+      tags:
+        - Places
+      summary: Видалити заклад
+      description: |
+        Видаляє заклад. **Вимагає авторизації.**
+        
+        Разом із закладом видаляються всі пов'язані борщі.
+      operationId: deletePlace
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '204':
+          description: Заклад успішно видалено
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /borsches/:
+    get:
+      tags:
+        - Borsches
+      summary: Отримати список борщів
+      description: |
+        Повертає список всіх борщів з можливістю фільтрації.
+        
+        **Фільтри:**
+        - `place_id` - фільтр по закладу
+        - `type_meat` - фільтр по типу м'яса
+        - `min_price`, `max_price` - діапазон цін
+      operationId: listBorsches
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/pageSizeParam'
+        - name: place_id
+          in: query
+          description: Фільтр по закладу (UUID)
+          schema:
+            type: string
+            format: uuid
+          example: "c4f2d26e-9b1b-4a21-9c8a-1a6d3c251234"
+        - name: type_meat
+          in: query
+          description: Фільтр по типу м'яса
+          schema:
+            type: string
+            enum: [no_meat, chicken, pork, beef, other]
+          example: "pork"
+        - name: min_price
+          in: query
+          description: Мінімальна ціна (грн)
+          schema:
+            type: number
+            minimum: 0
+          example: 200
+        - name: max_price
+          in: query
+          description: Максимальна ціна (грн)
+          schema:
+            type: number
+            minimum: 0
+          example: 500
+      responses:
+        '200':
+          description: Успішний відповідь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBorschList'
+              examples:
+                example-1:
+                  summary: Приклад відповіді
+                  value:
+                    count: 2
+                    next: null
+                    previous: null
+                    page: 1
+                    page_size: 20
+                    total_pages: 1
+                    results:
+                      - id: "b1a2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+                        place: "c4f2d26e-9b1b-4a21-9c8a-1a6d3c251234"
+                        place_name: "Пузата Хата"
+                        name: "Борщ з пампушками"
+                        type_meat: "pork"
+                        price_uah: 350.00
+                        weight_grams: 600
+                        photo_urls:
+                          - "/media/borsches/b1a2c3d4/photos/abc123.png"
+                        rating_salt: 5.0
+                        rating_meat: 8.0
+                        rating_beet: 5.0
+                        rating_density: 10.0
+                        rating_aftertaste: 8.0
+                        rating_serving: 9.0
+                        overall_rating: 9.0
+                        created_at: "2025-03-12T10:15:00Z"
+                        updated_at: "2025-03-20T08:00:00Z"
+        '500':
+          $ref: '#/components/responses/ServerError'
+    
+    post:
+      tags:
+        - Borsches
+      summary: Створити новий борщ
+      description: |
+        Створює новий борщ для закладу. **Вимагає авторизації.**
+        
+        Обов'язкові поля: `place`, `name`, `type_meat`, `price_uah`, `weight_grams`.
+        
+        Рейтинги ініціалізуються нулями.
+      operationId: createBorsch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BorschCreate'
+            examples:
+              example-1:
+                summary: Приклад створення борщу
+                value:
+                  place: "c4f2d26e-9b1b-4a21-9c8a-1a6d3c251234"
+                  name: "Борщ з пампушками"
+                  type_meat: "pork"
+                  price_uah: 350.00
+                  weight_grams: 600
+                  photo_urls: []
+      responses:
+        '201':
+          description: Борщ успішно створено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Borsch'
+              examples:
+                example-1:
+                  summary: Приклад відповіді
+                  value:
+                    id: "b1a2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+                    place: "c4f2d26e-9b1b-4a21-9c8a-1a6d3c251234"
+                    place_name: "Пузата Хата"
+                    name: "Борщ з пампушками"
+                    type_meat: "pork"
+                    price_uah: 350.00
+                    weight_grams: 600
+                    photo_urls: []
+                    rating_salt: 0.0
+                    rating_meat: 0.0
+                    rating_beet: 0.0
+                    rating_density: 0.0
+                    rating_aftertaste: 0.0
+                    rating_serving: 0.0
+                    overall_rating: 0.0
+                    created_at: "2025-03-12T10:15:00Z"
+                    updated_at: "2025-03-12T10:15:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Заклад не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                example-1:
+                  value:
+                    error: "Заклад з таким ID не знайдено"
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /borsches/{id}/:
+    get:
+      tags:
+        - Borsches
+      summary: Отримати борщ по ID
+      description: Повертає детальну інформацію про борщ
+      operationId: retrieveBorsch
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '200':
+          description: Успішний відповідь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Borsch'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    
+    patch:
+      tags:
+        - Borsches
+      summary: Оновити борщ
+      description: |
+        Часткове оновлення борщу. **Вимагає авторизації.**
+        
+        Дозволяє оновлювати основні атрибути (не рейтинги).
+      operationId: updateBorsch
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BorschUpdate'
+            examples:
+              example-1:
+                summary: Приклад оновлення
+                value:
+                  name: "Борщ з пампушками (оновлено)"
+                  price_uah: 380.00
+      responses:
+        '200':
+          description: Борщ успішно оновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Borsch'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    
+    delete:
+      tags:
+        - Borsches
+      summary: Видалити борщ
+      description: |
+        Видаляє борщ. **Вимагає авторизації.**
+        
+        Разом із борщем видаляються всі пов'язані відгуки.
+      operationId: deleteBorsch
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '204':
+          description: Борщ успішно видалено
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /borsches/{id}/upload_photo/:
+    post:
+      tags:
+        - Borsches
+      summary: Завантажити фото борщу
+      description: |
+        Завантажує фото для борщу. **Вимагає авторизації.**
+        
+        Приймає `multipart/form-data` з полем `photo`.
+        
+        Фото зберігається у медіа-директорію, URL додається до списку `photo_urls`.
+      operationId: uploadBorschPhoto
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                photo:
+                  type: string
+                  format: binary
+                  description: Файл зображення (PNG, JPG, WEBP)
+              required:
+                - photo
+            examples:
+              example-1:
+                summary: Приклад завантаження фото
+                value:
+                  photo: "<binary file: borsch-photo.png>"
+      responses:
+        '201':
+          description: Фото успішно завантажено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhotoUploadResponse'
+              examples:
+                example-1:
+                  summary: Приклад відповіді
+                  value:
+                    photo_url: "/media/borsches/b1a2c3d4/photos/abc123.png"
+                    message: "Фото успішно завантажено"
+        '400':
+          description: Файл не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                example-1:
+                  value:
+                    error: "Файл не знайдено. Використовуйте поле \"photo\"."
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /reviews/:
+    get:
+      tags:
+        - Reviews
+      summary: Отримати список відгуків
+      description: |
+        Повертає список відгуків з можливістю фільтрації по борщу.
+        
+        **Фільтри:**
+        - `borsch_id` - фільтр по борщу (опційний)
+      operationId: listReviews
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/pageSizeParam'
+        - name: borsch_id
+          in: query
+          description: Фільтр по борщу (UUID)
+          schema:
+            type: string
+            format: uuid
+          example: "b1a2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+      responses:
+        '200':
+          description: Успішний відповідь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReviewList'
+              examples:
+                example-1:
+                  summary: Приклад відповіді
+                  value:
+                    count: 2
+                    next: null
+                    previous: null
+                    page: 1
+                    page_size: 20
+                    total_pages: 1
+                    results:
+                      - id: "rev-123456-7890ab-cdef"
+                        borsch: "b1a2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+                        borsch_name: "Борщ з пампушками"
+                        user: 1
+                        author_username: "user123"
+                        temp_user_id: ""
+                        message: "Дуже смачний борщ! Рекомендую."
+                        rating_salt: 9.0
+                        rating_meat: 8.0
+                        rating_beet: 9.0
+                        rating_density: 10.0
+                        rating_aftertaste: 8.0
+                        rating_serving: 10.0
+                        overall_rating: 9.0
+                        created_at: "2025-03-12T10:00:00Z"
+                        updated_at: "2025-03-12T10:00:00Z"
+        '500':
+          $ref: '#/components/responses/ServerError'
+    
+    post:
+      tags:
+        - Reviews
+      summary: Створити новий відгук
+      description: |
+        Створює новий відгук для борщу. **Вимагає авторизації.**
+        
+        Всі оцінки обов'язкові для заповнення (діапазон 0-10).
+        
+        Після створення відгуку автоматично перераховуються рейтинги борщу.
+      operationId: createReview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewCreate'
+            examples:
+              example-1:
+                summary: Приклад створення відгуку
+                value:
+                  borsch: "b1a2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+                  message: "Дуже смачний борщ! Рекомендую."
+                  rating_salt: 9
+                  rating_meat: 8
+                  rating_beet: 9
+                  rating_density: 10
+                  rating_aftertaste: 8
+                  rating_serving: 10
+                  overall_rating: 9
+      responses:
+        '201':
+          description: Відгук успішно створено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+              examples:
+                example-1:
+                  summary: Приклад відповіді
+                  value:
+                    id: "rev-123456-7890ab-cdef"
+                    borsch: "b1a2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+                    borsch_name: "Борщ з пампушками"
+                    user: 1
+                    author_username: "user123"
+                    temp_user_id: ""
+                    message: "Дуже смачний борщ! Рекомендую."
+                    rating_salt: 9.0
+                    rating_meat: 8.0
+                    rating_beet: 9.0
+                    rating_density: 10.0
+                    rating_aftertaste: 8.0
+                    rating_serving: 10.0
+                    overall_rating: 9.0
+                    created_at: "2025-03-12T10:00:00Z"
+                    updated_at: "2025-03-12T10:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Борщ не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                example-1:
+                  value:
+                    error: "Борщ з таким ID не знайдено"
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /reviews/{id}/:
+    get:
+      tags:
+        - Reviews
+      summary: Отримати відгук по ID
+      description: Повертає детальну інформацію про відгук
+      operationId: retrieveReview
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '200':
+          description: Успішний відповідь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    
+    patch:
+      tags:
+        - Reviews
+      summary: Оновити відгук
+      description: |
+        Оновлення відгуку. **Вимагає авторизації.**
+        
+        Дозволяє оновлювати повідомлення та оцінки.
+        
+        Після оновлення автоматично перераховуються рейтинги борщу.
+      operationId: updateReview
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewUpdate'
+            examples:
+              example-1:
+                summary: Приклад оновлення
+                value:
+                  message: "Виправлений відгук - борщ ще смачніший!"
+                  overall_rating: 10
+      responses:
+        '200':
+          description: Відгук успішно оновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Недостатньо прав для редагування цього відгуку
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                example-1:
+                  value:
+                    error: "Ви можете редагувати тільки власні відгуки"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    
+    delete:
+      tags:
+        - Reviews
+      summary: Видалити відгук
+      description: |
+        Видаляє відгук. **Вимагає авторизації.**
+        
+        Після видалення автоматично перераховуються рейтинги борщу.
+      operationId: deleteReview
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '204':
+          description: Відгук успішно видалено
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Недостатньо прав для видалення цього відгуку
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                example-1:
+                  value:
+                    error: "Ви можете видаляти тільки власні відгуки"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /profile/me/:
+    get:
+      tags:
+        - Profile
+      summary: Отримати профіль поточного користувача
+      description: |
+        Повертає профіль авторизованого користувача.
+        
+        **Вимагає авторизації.**
+      operationId: retrieveCurrentUserProfile
+      responses:
+        '200':
+          description: Успішний відповідь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+              examples:
+                example-1:
+                  summary: Приклад відповіді
+                  value:
+                    user: 1
+                    username: "user123"
+                    email: "user123@gmail.com"
+                    google_id: "google-oauth2|1234567890"
+                    given_name: "Marta"
+                    surname: "Valerie"
+                    country: "UA"
+                    locale: "uk-UA"
+                    avatar_url: "https://lh3.googleusercontent.com/a/AEdFTp..."
+                    created_at: "2025-03-12T10:00:00Z"
+                    updated_at: "2025-03-20T08:00:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    
+    patch:
+      tags:
+        - Profile
+      summary: Оновити профіль поточного користувача
+      description: |
+        Оновлює профіль авторизованого користувача.
+        
+        Дозволяє редагувати: `given_name`, `email`, `country`.
+        
+        **Вимагає авторизації.**
+      operationId: updateCurrentUserProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserProfileUpdate'
+            examples:
+              example-1:
+                summary: Приклад оновлення профілю
+                value:
+                  given_name: "Марта"
+                  email: "newemail@gmail.com"
+                  country: "Україна"
+      responses:
+        '200':
+          description: Профіль успішно оновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /favorites/:
+    get:
+      tags:
+        - Favorites
+      summary: Отримати список обраних борщів
+      description: |
+        Повертає список обраних борщів поточного користувача.
+        
+        **Вимагає авторизації.**
+      operationId: listFavorites
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/pageSizeParam'
+      responses:
+        '200':
+          description: Успішний відповідь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFavoriteBorschList'
+              examples:
+                example-1:
+                  summary: Приклад відповіді
+                  value:
+                    count: 2
+                    next: null
+                    previous: null
+                    page: 1
+                    page_size: 20
+                    total_pages: 1
+                    results:
+                      - id: "fav-abc123"
+                        user: 1
+                        borsch: "b1a2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+                        borsch_detail:
+                          id: "b1a2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+                          name: "Борщ з пампушками"
+                          overall_rating: 9.0
+                        added_at: "2025-03-15T12:00:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    
+    post:
+      tags:
+        - Favorites
+      summary: Додати борщ до обраних
+      description: |
+        Додає борщ до списку обраних. **Вимагає авторизації.**
+        
+        У тілі запиту потрібно передати `borsch` (UUID борщу).
+      operationId: createFavorite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                borsch:
+                  type: string
+                  format: uuid
+                  description: UUID борщу
+              required:
+                - borsch
+            examples:
+              example-1:
+                summary: Приклад додавання до обраних
+                value:
+                  borsch: "b1a2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+      responses:
+        '201':
+          description: Борщ успішно додано до обраних
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoriteBorsch'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /favorites/{id}/:
+    delete:
+      tags:
+        - Favorites
+      summary: Видалити з обраних
+      description: |
+        Видаляє борщ зі списку обраних. **Вимагає авторизації.**
+      operationId: deleteFavorite
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '204':
+          description: Борщ успішно видалено з обраних
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /users/:
+    get:
+      tags:
+        - Users
+      summary: Отримати список користувачів
+      description: Повертає список користувачів (тільки читання)
+      operationId: listUsers
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/pageSizeParam'
+      responses:
+        '200':
+          description: Успішний відповідь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserList'
+              examples:
+                example-1:
+                  summary: Приклад відповіді
+                  value:
+                    count: 2
+                    next: null
+                    previous: null
+                    page: 1
+                    page_size: 20
+                    total_pages: 1
+                    results:
+                      - id: 1
+                        username: "user123"
+                        email: "user123@gmail.com"
+                        first_name: "Marta"
+                        last_name: "Valerie"
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /users/{id}/:
+    get:
+      tags:
+        - Users
+      summary: Отримати користувача по ID
+      description: Повертає детальну інформацію про користувача
+      operationId: retrieveUser
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '200':
+          description: Успішний відповідь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+components:
+  parameters:
+    pageParam:
+      name: page
+      in: query
+      description: Номер сторінки (починаючи з 1)
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      example: 1
+    
+    pageSizeParam:
+      name: page_size
+      in: query
+      description: Кількість записів на сторінці
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      example: 20
+    
+    idParam:
+      name: id
+      in: path
+      description: UUID ідентифікатор
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: "c4f2d26e-9b1b-4a21-9c8a-1a6d3c251234"
+
+  schemas:
+    # ==========================================================================
+    # PlaceType
+    # ==========================================================================
+    PlaceType:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Машинозчитуваний код типу
+          example: "RESTAURANT"
+        label:
+          type: string
+          description: Відображувана назва українською
+          example: "Ресторан"
+      required:
+        - code
+        - label
+    
+    PaginatedPlaceTypeList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 4
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total_pages:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlaceType'
+
+    # ==========================================================================
+    # Place
+    # ==========================================================================
+    Place:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Унікальний ідентифікатор закладу
+          example: "c4f2d26e-9b1b-4a21-9c8a-1a6d3c251234"
+        name:
+          type: string
+          description: Назва закладу
+          example: "Пузата Хата"
+        address:
+          type: string
+          description: Адреса закладу
+          example: "Хрещатик, 25"
+        location_lat:
+          type: number
+          description: Географічна широта
+          example: 50.450001
+        location_lng:
+          type: number
+          description: Географічна довгота
+          example: 30.523333
+        country:
+          type: string
+          description: Країна
+          example: "Україна"
+        city:
+          type: string
+          description: Місто
+          example: "Київ"
+        type:
+          type: string
+          description: Код типу закладу
+          example: "RESTAURANT"
+        type_label:
+          type: string
+          description: Назва типу закладу
+          example: "Ресторан"
+        created_at:
+          type: string
+          format: date-time
+          description: Дата створення
+          example: "2025-03-12T10:15:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: Дата оновлення
+          example: "2025-03-12T10:15:00Z"
+      required:
+        - id
+        - name
+        - address
+        - location_lat
+        - location_lng
+        - country
+        - city
+        - created_at
+        - updated_at
+    
+    PlaceCreate:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Назва закладу
+          example: "Пузата Хата"
+        address:
+          type: string
+          description: Адреса закладу
+          example: "Хрещатик, 25"
+        location_lat:
+          type: number
+          description: Географічна широта (-90 до 90)
+          example: 50.450001
+        location_lng:
+          type: number
+          description: Географічна довгота (-180 до 180)
+          example: 30.523333
+        country:
+          type: string
+          description: Країна
+          example: "Україна"
+        city:
+          type: string
+          description: Місто
+          example: "Київ"
+        type:
+          type: string
+          description: Код типу закладу
+          example: "RESTAURANT"
+      required:
+        - name
+        - address
+        - location_lat
+        - location_lng
+        - country
+        - city
+    
+    PlaceUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Назва закладу
+          example: "Пузата Хата (оновлено)"
+        address:
+          type: string
+          description: Адреса закладу
+          example: "Хрещатик, 25А"
+        location_lat:
+          type: number
+          description: Географічна широта
+          example: 50.450001
+        location_lng:
+          type: number
+          description: Географічна довгота
+          example: 30.523333
+        country:
+          type: string
+          description: Країна
+          example: "Україна"
+        city:
+          type: string
+          description: Місто
+          example: "Київ"
+        type:
+          type: string
+          description: Код типу закладу
+          example: "RESTAURANT"
+    
+    PaginatedPlaceList:
+      type: object
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total_pages:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Place'
+
+    # ==========================================================================
+    # Borsch
+    # ==========================================================================
+    Borsch:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Унікальний ідентифікатор борщу
+          example: "b1a2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+        place:
+          type: string
+          format: uuid
+          description: UUID закладу
+          example: "c4f2d26e-9b1b-4a21-9c8a-1a6d3c251234"
+        place_name:
+          type: string
+          description: Назва закладу
+          example: "Пузата Хата"
+        name:
+          type: string
+          description: Назва борщу
+          example: "Борщ з пампушками"
+        type_meat:
+          type: string
+          description: Тип м'яса
+          enum: [no_meat, chicken, pork, beef, other]
+          example: "pork"
+        price_uah:
+          type: number
+          description: Ціна у гривнях
+          example: 350.00
+        weight_grams:
+          type: integer
+          description: Вага у грамах
+          example: 600
+        photo_urls:
+          type: array
+          items:
+            type: string
+          description: Список URL фотографій
+          example: ["/media/borsches/b1a2c3d4/photos/abc123.png"]
+        rating_salt:
+          type: number
+          description: Середня оцінка солоності (0-10)
+          example: 5.0
+        rating_meat:
+          type: number
+          description: Середня оцінка м'яса (0-10)
+          example: 8.0
+        rating_beet:
+          type: number
+          description: Середня оцінка буряка (0-10)
+          example: 5.0
+        rating_density:
+          type: number
+          description: Середня оцінка густоти (0-10)
+          example: 10.0
+        rating_aftertaste:
+          type: number
+          description: Середня оцінка післясмаку (0-10)
+          example: 8.0
+        rating_serving:
+          type: number
+          description: Середня оцінка подачі (0-10)
+          example: 9.0
+        overall_rating:
+          type: number
+          description: Загальна оцінка (0-10)
+          example: 9.0
+        created_at:
+          type: string
+          format: date-time
+          description: Дата створення
+          example: "2025-03-12T10:15:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: Дата оновлення
+          example: "2025-03-20T08:00:00Z"
+      required:
+        - id
+        - place
+        - name
+        - type_meat
+        - price_uah
+        - weight_grams
+        - created_at
+        - updated_at
+    
+    BorschCreate:
+      type: object
+      properties:
+        place:
+          type: string
+          format: uuid
+          description: UUID закладу
+          example: "c4f2d26e-9b1b-4a21-9c8a-1a6d3c251234"
+        name:
+          type: string
+          description: Назва борщу
+          example: "Борщ з пампушками"
+        type_meat:
+          type: string
+          description: Тип м'яса
+          enum: [no_meat, chicken, pork, beef, other]
+          example: "pork"
+        price_uah:
+          type: number
+          description: Ціна у гривнях
+          minimum: 0.01
+          example: 350.00
+        weight_grams:
+          type: integer
+          description: Вага у грамах
+          minimum: 1
+          example: 600
+        photo_urls:
+          type: array
+          items:
+            type: string
+          description: Список URL фотографій
+          example: []
+      required:
+        - place
+        - name
+        - type_meat
+        - price_uah
+        - weight_grams
+    
+    BorschUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Назва борщу
+          example: "Борщ з пампушками (оновлено)"
+        type_meat:
+          type: string
+          description: Тип м'яса
+          enum: [no_meat, chicken, pork, beef, other]
+        price_uah:
+          type: number
+          description: Ціна у гривнях
+          minimum: 0.01
+          example: 380.00
+        weight_grams:
+          type: integer
+          description: Вага у грамах
+          minimum: 1
+          example: 650
+        photo_urls:
+          type: array
+          items:
+            type: string
+          description: Список URL фотографій
+    
+    PaginatedBorschList:
+      type: object
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total_pages:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Borsch'
+
+    # ==========================================================================
+    # Review
+    # ==========================================================================
+    Review:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Унікальний ідентифікатор відгуку
+          example: "rev-123456-7890ab-cdef"
+        borsch:
+          type: string
+          format: uuid
+          description: UUID борщу
+          example: "b1a2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+        borsch_name:
+          type: string
+          description: Назва борщу
+          example: "Борщ з пампушками"
+        user:
+          type: integer
+          description: ID користувача (може бути null для тимчасових)
+          example: 1
+        author_username:
+          type: string
+          description: Ім'я користувача
+          example: "user123"
+        temp_user_id:
+          type: string
+          description: Тимчасовий ID для анонімних користувачів
+          example: ""
+        message:
+          type: string
+          description: Текст відгуку
+          example: "Дуже смачний борщ! Рекомендую."
+        rating_salt:
+          type: number
+          description: Оцінка солоності (0-10)
+          example: 9.0
+        rating_meat:
+          type: number
+          description: Оцінка м'яса (0-10)
+          example: 8.0
+        rating_beet:
+          type: number
+          description: Оцінка буряка (0-10)
+          example: 9.0
+        rating_density:
+          type: number
+          description: Оцінка густоти (0-10)
+          example: 10.0
+        rating_aftertaste:
+          type: number
+          description: Оцінка післясмаку (0-10)
+          example: 8.0
+        rating_serving:
+          type: number
+          description: Оцінка подачі (0-10)
+          example: 10.0
+        overall_rating:
+          type: number
+          description: Загальна оцінка (0-10)
+          example: 9.0
+        created_at:
+          type: string
+          format: date-time
+          description: Дата створення
+          example: "2025-03-12T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: Дата оновлення
+          example: "2025-03-12T10:00:00Z"
+      required:
+        - id
+        - borsch
+        - message
+        - rating_salt
+        - rating_meat
+        - rating_beet
+        - rating_density
+        - rating_aftertaste
+        - rating_serving
+        - overall_rating
+        - created_at
+    
+    ReviewCreate:
+      type: object
+      properties:
+        borsch:
+          type: string
+          format: uuid
+          description: UUID борщу
+          example: "b1a2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+        message:
+          type: string
+          description: Текст відгуку
+          example: "Дуже смачний борщ! Рекомендую."
+        rating_salt:
+          type: number
+          description: Оцінка солоності (0-10)
+          minimum: 0
+          maximum: 10
+          example: 9
+        rating_meat:
+          type: number
+          description: Оцінка м'яса (0-10)
+          minimum: 0
+          maximum: 10
+          example: 8
+        rating_beet:
+          type: number
+          description: Оцінка буряка (0-10)
+          minimum: 0
+          maximum: 10
+          example: 9
+        rating_density:
+          type: number
+          description: Оцінка густоти (0-10)
+          minimum: 0
+          maximum: 10
+          example: 10
+        rating_aftertaste:
+          type: number
+          description: Оцінка післясмаку (0-10)
+          minimum: 0
+          maximum: 10
+          example: 8
+        rating_serving:
+          type: number
+          description: Оцінка подачі (0-10)
+          minimum: 0
+          maximum: 10
+          example: 10
+        overall_rating:
+          type: number
+          description: Загальна оцінка (0-10)
+          minimum: 0
+          maximum: 10
+          example: 9
+      required:
+        - borsch
+        - message
+        - rating_salt
+        - rating_meat
+        - rating_beet
+        - rating_density
+        - rating_aftertaste
+        - rating_serving
+        - overall_rating
+    
+    ReviewUpdate:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Текст відгуку
+          example: "Виправлений відгук"
+        rating_salt:
+          type: number
+          description: Оцінка солоності (0-10)
+          minimum: 0
+          maximum: 10
+        rating_meat:
+          type: number
+          description: Оцінка м'яса (0-10)
+          minimum: 0
+          maximum: 10
+        rating_beet:
+          type: number
+          description: Оцінка буряка (0-10)
+          minimum: 0
+          maximum: 10
+        rating_density:
+          type: number
+          description: Оцінка густоти (0-10)
+          minimum: 0
+          maximum: 10
+        rating_aftertaste:
+          type: number
+          description: Оцінка післясмаку (0-10)
+          minimum: 0
+          maximum: 10
+        rating_serving:
+          type: number
+          description: Оцінка подачі (0-10)
+          minimum: 0
+          maximum: 10
+        overall_rating:
+          type: number
+          description: Загальна оцінка (0-10)
+          minimum: 0
+          maximum: 10
+    
+    PaginatedReviewList:
+      type: object
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total_pages:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Review'
+
+    # ==========================================================================
+    # UserProfile
+    # ==========================================================================
+    UserProfile:
+      type: object
+      properties:
+        user:
+          type: integer
+          description: ID користувача
+          example: 1
+        username:
+          type: string
+          description: Ім'я користувача
+          example: "user123"
+        email:
+          type: string
+          format: email
+          description: Email користувача
+          example: "user123@gmail.com"
+        google_id:
+          type: string
+          description: Google OAuth ID
+          example: "google-oauth2|1234567890"
+        given_name:
+          type: string
+          description: Ім'я з Google профілю
+          example: "Marta"
+        surname:
+          type: string
+          description: Прізвище
+          example: "Valerie"
+        country:
+          type: string
+          description: Країна
+          example: "UA"
+        locale:
+          type: string
+          description: Локаль (мова)
+          example: "uk-UA"
+        avatar_url:
+          type: string
+          format: uri
+          description: URL аватара
+          example: "https://lh3.googleusercontent.com/a/AEdFTp..."
+        created_at:
+          type: string
+          format: date-time
+          description: Дата створення
+          example: "2025-03-12T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: Дата оновлення
+          example: "2025-03-20T08:00:00Z"
+      required:
+        - user
+        - username
+        - email
+        - given_name
+        - created_at
+        - updated_at
+    
+    UserProfileUpdate:
+      type: object
+      properties:
+        given_name:
+          type: string
+          description: Ім'я
+          example: "Марта"
+        email:
+          type: string
+          format: email
+          description: Email
+          example: "newemail@gmail.com"
+        country:
+          type: string
+          description: Країна
+          example: "Україна"
+
+    # ==========================================================================
+    # FavoriteBorsch
+    # ==========================================================================
+    FavoriteBorsch:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Унікальний ідентифікатор запису
+          example: "fav-abc123"
+        user:
+          type: integer
+          description: ID користувача
+          example: 1
+        borsch:
+          type: string
+          format: uuid
+          description: UUID борщу
+          example: "b1a2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+        borsch_detail:
+          $ref: '#/components/schemas/Borsch'
+        added_at:
+          type: string
+          format: date-time
+          description: Дата додавання
+          example: "2025-03-15T12:00:00Z"
+      required:
+        - id
+        - user
+        - borsch
+        - added_at
+    
+    PaginatedFavoriteBorschList:
+      type: object
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total_pages:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/FavoriteBorsch'
+
+    # ==========================================================================
+    # User
+    # ==========================================================================
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: ID користувача
+          example: 1
+        username:
+          type: string
+          description: Ім'я користувача
+          example: "user123"
+        email:
+          type: string
+          format: email
+          description: Email
+          example: "user123@gmail.com"
+        first_name:
+          type: string
+          description: Ім'я
+          example: "Marta"
+        last_name:
+          type: string
+          description: Прізвище
+          example: "Valerie"
+      required:
+        - id
+        - username
+        - email
+    
+    PaginatedUserList:
+      type: object
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total_pages:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+
+    # ==========================================================================
+    # Additional schemas
+    # ==========================================================================
+    PhotoUploadResponse:
+      type: object
+      properties:
+        photo_url:
+          type: string
+          description: URL завантаженого фото
+          example: "/media/borsches/b1a2c3d4/photos/abc123.png"
+        message:
+          type: string
+          description: Повідомлення про успішне завантаження
+          example: "Фото успішно завантажено"
+    
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Опис помилки
+          example: "Помилка валідації"
+      required:
+        - error
+
+  responses:
+    BadRequest:
+      description: Помилка валідації даних
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            example-1:
+              summary: Приклад помилки валідації
+              value:
+                error: "Поле 'name' є обов'язковим"
+    
+    Unauthorized:
+      description: Потрібна авторизація
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            example-1:
+              value:
+                error: "Потрібна авторизація"
+    
+    NotFound:
+      description: Ресурс не знайдено
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            example-1:
+              value:
+                error: "Ресурс не знайдено"
+    
+    ServerError:
+      description: Внутрішня помилка сервера
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            example-1:
+              value:
+                error: "Внутрішня помилка сервера"
