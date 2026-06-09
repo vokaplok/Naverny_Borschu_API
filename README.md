@@ -138,6 +138,8 @@ Authorization: Bearer <your-token>
 
 Ендпоінт валідує токен через Google, створює або оновлює користувача в таблиці `users` і відкриває Django session.
 
+Важливо: сервер вимагає налаштований `GOOGLE_OAUTH_CLIENT_IDS` (comma-separated список дозволених Google client id). Без нього ендпоінт поверне `400`.
+
 ---
 
 ## 📝 Приклади запитів (cURL)

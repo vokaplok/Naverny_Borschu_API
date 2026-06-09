@@ -51,7 +51,7 @@ def _configured_google_client_ids() -> set[str]:
 def _validate_audience(aud: str, azp: str) -> None:
     allowed_ids = _configured_google_client_ids()
     if not allowed_ids:
-        return
+        raise GoogleAuthError('Server Google OAuth client IDs are not configured')
 
     audience_values = {value for value in (aud, azp) if value}
     if not audience_values.intersection(allowed_ids):
@@ -86,6 +86,9 @@ def fetch_google_identity(*, id_token: str | None = None, access_token: str | No
 
     aud = (token_info.get('aud') or '').strip()
     azp = (token_info.get('azp') or '').strip()
+
+    # Fail closed when the server has not been configured with allowed Google
+    # OAuth client ids. This avoids accepting tokens minted for arbitrary apps.
     _validate_audience(aud, azp)
 
     return GoogleIdentity(

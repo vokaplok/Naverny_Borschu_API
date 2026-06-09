@@ -92,3 +92,16 @@ class GoogleAuthViewTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data['error'], 'Google token audience is not allowed')
+
+    @patch('core.viewsets.fetch_google_identity')
+    def test_returns_400_when_server_google_client_ids_missing(self, fetch_google_identity_mock):
+        fetch_google_identity_mock.side_effect = GoogleAuthError('Server Google OAuth client IDs are not configured')
+
+        response = self.client.post(
+            reverse('auth-google'),
+            {'id_token': 'bad-token'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['error'], 'Server Google OAuth client IDs are not configured')
