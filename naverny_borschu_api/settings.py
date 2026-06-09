@@ -100,5 +100,13 @@ REST_FRAMEWORK = {
 # CORS
 CORS_ALLOW_ALL_ORIGINS = True
 
+# Optional Google OAuth audience allow-list. When empty, Google-issued tokens
+# are accepted without client-id pinning.
+GOOGLE_OAUTH_CLIENT_IDS = [
+    value.strip()
+    for value in os.environ.get('GOOGLE_OAUTH_CLIENT_IDS', '').split(',')
+    if value.strip()
+]
+
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

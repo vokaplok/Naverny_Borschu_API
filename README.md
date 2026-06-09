@@ -130,7 +130,13 @@ Authorization: Bearer <your-token>
 
 ### Примітка для фронтенду
 
-На даний момент авторизація реалізована через Django session/auth. Для Google OAuth інтеграції потрібно буде додати додатковий ендпоінт `/api/auth/google/` (планується).
+Для Google sign-in доступний ендпоінт `POST /api/auth/google/`.
+
+Очікує JSON з одним із полів:
+- `id_token`
+- `access_token`
+
+Ендпоінт валідує токен через Google, створює або оновлює користувача в таблиці `users` і відкриває Django session.
 
 ---
 

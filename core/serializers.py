@@ -42,6 +42,16 @@ class AppUserSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class GoogleAuthSerializer(serializers.Serializer):
+    id_token = serializers.CharField(required=False, allow_blank=False)
+    access_token = serializers.CharField(required=False, allow_blank=False)
+
+    def validate(self, attrs):
+        if not attrs.get('id_token') and not attrs.get('access_token'):
+            raise serializers.ValidationError('Either id_token or access_token is required')
+        return attrs
+
+
 class CommentReplySerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.name', read_only=True)
 
