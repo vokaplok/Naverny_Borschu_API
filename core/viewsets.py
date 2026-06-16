@@ -1,17 +1,92 @@
+import os
+
+from django.contrib.auth import login
+from django.contrib.auth.models import User
+from django.db import transaction
+from django.db.models import Q, Exists, OuterRef
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
-from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
-from django.db.models import Avg, Q
-import os
-from django.conf import settings
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from .google_auth import GoogleAuthError, fetch_google_identity
 from .models import Place, Borsch, AppUser, Rating, Comment, CommentLike, CommentReply, FavoriteBorsch
 from .serializers import (
     PlaceSerializer, BorschListSerializer, BorschDetailSerializer,
     AppUserSerializer, RatingSerializer, CommentSerializer,
-    CommentReplySerializer, FavoriteBorschSerializer
+    CommentReplySerializer, FavoriteBorschSerializer, GoogleAuthSerializer
 )
+
+
+class GoogleAuthView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    @transaction.atomic
+    def post(self, request):
+        serializer = GoogleAuthSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            identity = fetch_google_identity(**serializer.validated_data)
+        except GoogleAuthError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        user_defaults = {
+            'name': identity.given_name or identity.full_name,
+            'surname': identity.family_name,
+            'photo_url': identity.picture,
+        }
+        app_user, created = AppUser.objects.get_or_create(
+            email=identity.email,
+            defaults=user_defaults,
+        )
+
+        if not created:
+            updated_fields = []
+            for field, value in user_defaults.items():
+                if value and getattr(app_user, field) != value:
+                    setattr(app_user, field, value)
+                    updated_fields.append(field)
+            if updated_fields:
+                app_user.save(update_fields=updated_fields)
+
+        auth_defaults = {
+            'email': identity.email,
+            'first_name': identity.given_name,
+            'last_name': identity.family_name,
+        }
+        auth_user, auth_created = User.objects.get_or_create(
+            username=identity.email[:150],
+            defaults=auth_defaults,
+        )
+        auth_updated_fields = []
+        for field, value in auth_defaults.items():
+            if value and getattr(auth_user, field) != value:
+                setattr(auth_user, field, value)
+                auth_updated_fields.append(field)
+        if auth_created:
+            auth_user.set_unusable_password()
+            auth_updated_fields.append('password')
+        if auth_updated_fields:
+            auth_user.save(update_fields=auth_updated_fields)
+
+        login(request, auth_user, backend='django.contrib.auth.backends.ModelBackend')
+
+        return Response(
+            {
+                'user': AppUserSerializer(app_user).data,
+                'is_new_user': created,
+                'session_authenticated': True,
+                'google': {
+                    'email': identity.email,
+                    'email_verified': identity.email_verified,
+                    'locale': identity.locale,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class PlaceViewSet(viewsets.ModelViewSet):
@@ -19,6 +94,18 @@ class PlaceViewSet(viewsets.ModelViewSet):
     serializer_class = PlaceSerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ['name', 'address', 'city']
+    # Disable global pagination for places — the dataset is manageable and
+    # clients need all results when filtering by city/bbox.
+    pagination_class = None
+
+    @action(detail=False, methods=['get'], url_path='cities')
+    def cities(self, request):
+        """Return all distinct city names that have at least one borsch."""
+        qs = Place.objects.filter(
+            Exists(Borsch.objects.filter(place=OuterRef('pk')))
+        ).values_list('city', flat=True).distinct().order_by('city')
+        city_list = sorted({c for c in qs if c})
+        return Response({'cities': city_list})
 
     def get_queryset(self):
         qs = super().get_queryset()

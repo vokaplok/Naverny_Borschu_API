@@ -57,7 +57,7 @@ class AppUser(models.Model):
     surname = models.CharField(max_length=100, blank=True, default='')
     email = models.CharField(max_length=255, unique=True)
     photo_url = models.CharField(max_length=500, blank=True, default='')
-    following_borsch = models.JSONField(default=list, blank=True)
+    following_borsch = ArrayField(models.IntegerField(), default=list, blank=True)
 
     class Meta:
         db_table = 'users'

@@ -2,7 +2,8 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .viewsets import (
     PlaceViewSet, BorschViewSet, AppUserViewSet,
-    CommentViewSet, RatingViewSet, FavoriteBorschViewSet
+    CommentViewSet, RatingViewSet, FavoriteBorschViewSet,
+    GoogleAuthView,
 )
 
 router = DefaultRouter()
@@ -14,5 +15,6 @@ router.register(r'ratings', RatingViewSet)
 router.register(r'favorites', FavoriteBorschViewSet)
 
 urlpatterns = [
+    path('auth/google/', GoogleAuthView.as_view(), name='auth-google'),
     path('', include(router.urls)),
 ]
